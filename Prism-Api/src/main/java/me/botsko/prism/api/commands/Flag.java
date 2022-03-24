@@ -13,7 +13,6 @@ public enum Flag {
     NO_GROUP("flag-no-group"),
     OVERWRITE("flag-overwrite"),
     SHARE("-share=player1[,player2...]", "flag-share-result"),
-    PASTE("flag-paste"),
     NO_PHYS("flag-no-physics");
 
     private final String description;

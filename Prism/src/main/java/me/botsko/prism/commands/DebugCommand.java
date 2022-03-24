@@ -13,10 +13,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
-import org.kitteh.pastegg.PasteBuilder;
-import org.kitteh.pastegg.PasteContent;
-import org.kitteh.pastegg.PasteFile;
-import org.kitteh.pastegg.Visibility;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -52,8 +48,6 @@ public class DebugCommand implements SubHandler {
                     Component.text(Il8nHelper.getRawMessage("debug-msg") + " " + Prism.isDebug())));
             return;
         }
-        Bukkit.getScheduler().runTaskAsynchronously(Prism.getInstance(), () -> createPaste(
-                call.getSender()));
     }
 
     private String getFile(Path file) {
@@ -120,58 +114,6 @@ public class DebugCommand implements SubHandler {
         return out.toString();
     }
 
-
-    private void createPaste(CommandSender sender) {
-        Path dataPath = Prism.getInstance().getDataFolder().toPath();
-        Path prismConfig = dataPath.resolve("config.yml");
-        Path hikariProps = dataPath.resolve("hikari.properties");
-        Path prismLog = dataPath.resolve("prism.log");
-        String pLog;
-        if (prismLog.toFile().length() < 2000000L) {
-            pLog = getFile(prismLog);
-        } else {
-            pLog = "TRUNCATED DUE TO LARGE SIZE: you may need to manually paste. <pluginDir>/prism.log";
-        }
-        PasteBuilder.PasteResult result = new PasteBuilder().name("Prism Debug Output")
-                .visibility(Visibility.UNLISTED)
-                .setApiKey(Prism.getPasteKey())
-                .expires(ZonedDateTime.now().plusDays(1)) //1 day
-                .addFile(new PasteFile("Main Info",
-                        new PasteContent(PasteContent.ContentType.TEXT, getMainInfo())))
-                .addFile(new PasteFile("config.yml",
-                        new PasteContent(PasteContent.ContentType.TEXT, getFile(prismConfig))))
-                .addFile(new PasteFile("hikari.properties",
-                        new PasteContent(PasteContent.ContentType.TEXT, getFile(hikariProps))))
-                .addFile(new PasteFile("dataSource Properties",
-                        new PasteContent(PasteContent.ContentType.TEXT, getDataSourceInfo())))
-                .addFile(new PasteFile("Prism Log",
-                        new PasteContent(PasteContent.ContentType.TEXT, pLog)))
-                .build();
-        if (result.getPaste().isPresent()) {
-            String pasteUrl = "https://paste.gg/" + result.getPaste().get().getId();
-            Prism.messenger.sendMessage(sender,
-                    Prism.messenger.playerMsg(Il8nHelper.getMessage("paste-output")
-                            .replaceFirstText(Pattern.compile("<pasteUrl>"), builder ->
-                                    Component.text()
-                                            .content(pasteUrl)
-                                            .clickEvent(ClickEvent.openUrl(pasteUrl)))));
-            Prism.log("Paste Created : " + pasteUrl);
-            result.getPaste().get().getDeletionKey().ifPresent(
-                  s -> {
-                          Prism.messenger.sendMessage(sender, Prism.messenger.playerMsg(
-                                  Il8nHelper.getMessage("delete-key")
-                                          .replaceFirstText(Pattern.compile("<deletekey>"), builder ->
-                                                  Component.text()
-                                                          .content(s)
-                                                          .clickEvent(ClickEvent.copyToClipboard(s)))));
-                          Prism.log("Deletion Key:" + s);
-                  }
-            );
-        } else {
-            Prism.messenger.sendMessage(sender,
-                    Prism.messenger.playerError(Il8nHelper.getMessage("debug-paste-error")));
-        }
-    }
 
     @Override
     public List<String> handleComplete(CallInfo call) {

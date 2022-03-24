@@ -18,9 +18,7 @@ import org.bukkit.FireworkEffect.Builder;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
-import org.bukkit.block.Jukebox;
+import org.bukkit.block.*;
 import org.bukkit.block.banner.Pattern;
 import org.bukkit.block.banner.PatternType;
 import org.bukkit.enchantments.Enchantment;
@@ -34,14 +32,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.BannerMeta;
-import org.bukkit.inventory.meta.BookMeta;
-import org.bukkit.inventory.meta.EnchantmentStorageMeta;
-import org.bukkit.inventory.meta.FireworkEffectMeta;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.inventory.meta.LeatherArmorMeta;
-import org.bukkit.inventory.meta.PotionMeta;
-import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.inventory.meta.*;
 import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionType;
 
@@ -94,8 +85,6 @@ public class ItemStackAction extends GenericAction {
      */
     public void setItem(ItemStack item, int quantity, Map<Enchantment, Integer> enchantments) {
 
-        actionData = new ItemStackActionData();
-
         if (enchantments != null) {
             this.enchantments = enchantments;
         }
@@ -112,12 +101,12 @@ public class ItemStackAction extends GenericAction {
 
         // Set basics
         setMaterial(item.getType());
-        actionData.durability = (short) ItemUtils.getItemDamage(item);
+        actionData = serializeItem(item, quantity, enchantments);
+    }
 
-        if (tempDurability >= 0) {
-            actionData.durability = tempDurability;
-            tempDurability = -1;
-        }
+    private static ItemStackActionData serializeItem(ItemStack item, int quantity, Map<Enchantment, Integer> enchantments) {
+        ItemStackActionData actionData = new ItemStackActionData();
+        actionData.durability = (short) ItemUtils.getItemDamage(item);
 
         actionData.amt = quantity;
 
@@ -154,10 +143,10 @@ public class ItemStackAction extends GenericAction {
         }
 
         // Enchantments
-        if (!this.enchantments.isEmpty()) {
-            final String[] enchs = new String[this.enchantments.size()];
+        if (!enchantments.isEmpty()) {
+            final String[] enchs = new String[enchantments.size()];
             int i = 0;
-            for (final Entry<Enchantment, Integer> ench : this.enchantments.entrySet()) {
+            for (final Entry<Enchantment, Integer> ench : enchantments.entrySet()) {
                 // This is silly
                 enchs[i] = ench.getKey().getKey().getKey() + ":" + ench.getValue();
                 i++;
@@ -179,18 +168,39 @@ public class ItemStackAction extends GenericAction {
             }
         }
         if (meta instanceof FireworkEffectMeta) {
-            applyFireWorksMetaToActionData(meta);
+            applyFireWorksMetaToActionData(actionData, meta);
         }
         if (meta instanceof BannerMeta) {
             List<Pattern> patterns = ((BannerMeta) meta).getPatterns();
             Map<String, String> stringyPatterns = new HashMap<>();
             patterns.forEach(
-                  pattern -> stringyPatterns.put(pattern.getPattern().getIdentifier(), pattern.getColor().name()));
+                    pattern -> stringyPatterns.put(pattern.getPattern().getIdentifier(), pattern.getColor().name()));
             actionData.bannerMeta = stringyPatterns;
         }
+        if (meta instanceof BlockStateMeta) {
+            BlockStateMeta blockStateMeta = (BlockStateMeta) meta;
+            BlockState blockState = blockStateMeta.getBlockState();
+            if (blockState instanceof InventoryHolder) {
+                InventoryHolder inventoryHolder = (InventoryHolder) blockState;
+                int slot = -1;
+                List<ItemStackActionData> inventoryItemsData = new ArrayList<>();
+                for (ItemStack inventoryItem : inventoryHolder.getInventory()) {
+                    slot++;
+                    if (inventoryItem == null || inventoryItem.getType().isAir()) continue;
+                    ItemStackActionData inventoryActionData = serializeItem(inventoryItem, inventoryItem.getAmount(), inventoryItem.getEnchantments());
+                    inventoryActionData.slot = Integer.toString(slot);
+                    inventoryActionData.material = inventoryItem.getType().toString();
+                    inventoryItemsData.add(inventoryActionData);
+                }
+                if (!inventoryItemsData.isEmpty()) {
+                    actionData.inventory = inventoryItemsData.toArray(ItemStackActionData[]::new);
+                }
+            }
+        }
+        return actionData;
     }
 
-    private void applyFireWorksMetaToActionData(ItemMeta meta) {
+    private static void applyFireWorksMetaToActionData(ItemStackActionData actionData, ItemMeta meta) {
         final FireworkEffectMeta fireworkMeta = (FireworkEffectMeta) meta;
         if (fireworkMeta.hasEffect()) {
             final FireworkEffect effect = fireworkMeta.getEffect();
@@ -223,7 +233,7 @@ public class ItemStackAction extends GenericAction {
         }
     }
 
-    private static ItemStack deserializeFireWorksMeta(ItemStack item, ItemMeta meta, ItemStackActionData actionData) {
+    private static void deserializeFireWorksMeta(ItemStack item, ItemMeta meta, ItemStackActionData actionData) {
 
         final FireworkEffectMeta fireworkMeta = (FireworkEffectMeta) meta;
         final Builder effect = FireworkEffect.builder();
@@ -247,7 +257,6 @@ public class ItemStackAction extends GenericAction {
         }
         fireworkMeta.setEffect(effect.build());
         item.setItemMeta(fireworkMeta);
-        return item;
     }
 
     public void setSlot(String slot) {
@@ -266,13 +275,17 @@ public class ItemStackAction extends GenericAction {
         }
         actionData = gson().fromJson(data, ItemStackActionData.class);
 
-        item = new ItemStack(getMaterial(), actionData.amt);
+        item = deserializeItem(getMaterial(), actionData);
+    }
 
-        MaterialState.setItemDamage(item, actionData.durability);
+    public static ItemStack deserializeItem(Material material, ItemStackActionData data) {
+        ItemStack item = new ItemStack(material, data.amt);
+
+        MaterialState.setItemDamage(item, data.durability);
 
         // Restore enchantment
-        if (actionData.enchs != null && actionData.enchs.length > 0) {
-            for (final String ench : actionData.enchs) {
+        if (data.enchs != null && data.enchs.length > 0) {
+            for (final String ench : data.enchs) {
                 final String[] enchArgs = ench.split(":");
                 Enchantment enchantment = Enchantment.getByKey(NamespacedKey.minecraft(enchArgs[0]));
 
@@ -292,68 +305,96 @@ public class ItemStackAction extends GenericAction {
         ItemMeta meta = item.getItemMeta();
 
         // Leather color
-        if (meta instanceof LeatherArmorMeta && actionData.color > 0) {
+        if (meta instanceof LeatherArmorMeta && data.color > 0) {
             final LeatherArmorMeta lam = (LeatherArmorMeta) meta;
-            lam.setColor(Color.fromRGB(actionData.color));
+            lam.setColor(Color.fromRGB(data.color));
             item.setItemMeta(lam);
-        } else if (meta instanceof SkullMeta && actionData.owner != null) {
+        } else if (meta instanceof SkullMeta && data.owner != null) {
             final SkullMeta skull = (SkullMeta) meta;
-            skull.setOwningPlayer(Bukkit.getOfflinePlayer(EntityUtils.uuidOf(actionData.owner)));
+            skull.setOwningPlayer(Bukkit.getOfflinePlayer(EntityUtils.uuidOf(data.owner)));
             item.setItemMeta(skull);
         } else if (meta instanceof BookMeta) {
             final BookMeta bookMeta = (BookMeta) meta;
-            bookMeta.setAuthor(actionData.by);
-            bookMeta.setTitle(actionData.title);
-            bookMeta.setPages(actionData.content);
+            bookMeta.setAuthor(data.by);
+            bookMeta.setTitle(data.title);
+            bookMeta.setPages(data.content);
             item.setItemMeta(bookMeta);
         } else if (meta instanceof PotionMeta) {
-            final PotionType potionType = PotionType.valueOf(actionData.potionType.toUpperCase());
+            final PotionType potionType = PotionType.valueOf(data.potionType.toUpperCase());
             final PotionMeta potionMeta = (PotionMeta) meta;
-            potionMeta.setBasePotionData(new PotionData(potionType, actionData.potionExtended,
-                    actionData.potionUpgraded));
+            potionMeta.setBasePotionData(new PotionData(potionType, data.potionExtended,
+                    data.potionUpgraded));
         }
-        if (meta instanceof FireworkEffectMeta && actionData.effectColors != null
-                && actionData.effectColors.length > 0) {
+        if (meta instanceof FireworkEffectMeta && data.effectColors != null
+                && data.effectColors.length > 0) {
 
-            item = deserializeFireWorksMeta(item, meta, actionData);
+            deserializeFireWorksMeta(item, meta, data);
         }
-        if (meta instanceof BannerMeta && actionData.bannerMeta != null) {
-            Map<String, String> stringStringMap = actionData.bannerMeta;
+        if (meta instanceof BannerMeta && data.bannerMeta != null) {
+            Map<String, String> stringStringMap = data.bannerMeta;
             List<Pattern> patterns = new ArrayList<>();
             stringStringMap.forEach((patternIdentifier, dyeName) -> {
                 PatternType type = PatternType.getByIdentifier(patternIdentifier);
                 DyeColor color = DyeColor.valueOf(dyeName);
-                if (type != null && color != null) {
+                if (type != null) {
                     Pattern p = new Pattern(color, type);
                     patterns.add(p);
                 }
             });
             ((BannerMeta) meta).setPatterns(patterns);
         }
-
-        if (actionData.name != null) {
-            if (meta == null) {
-                meta = item.getItemMeta();
-            }
-
-            if (meta != null) {
-                meta.setDisplayName(actionData.name);
+        if (meta instanceof BlockStateMeta && data.inventory != null) {
+            BlockState blockState = ((BlockStateMeta) meta).getBlockState();
+            if (blockState instanceof Container) {
+                Inventory inventory = ((Container) blockState).getInventory();
+                for (ItemStackActionData inventoryActionData : data.inventory) {
+                    int iSlot = -1;
+                    try {
+                        iSlot = Integer.parseInt(inventoryActionData.slot);
+                    } catch (IllegalArgumentException e) {
+                        // Ignored
+                    }
+                    try {
+                        ItemStack itemStack = deserializeItem(Material.valueOf(inventoryActionData.material), inventoryActionData);
+                        if (iSlot == -1) {
+                            inventory.addItem(itemStack);
+                        }
+                        else {
+                            inventory.setItem(iSlot, itemStack);
+                        }
+                    } catch (Exception e) {
+                        // Ignored
+                    }
+                }
+                blockState.update(true);
+                ((BlockStateMeta) meta).setBlockState(blockState);
             }
         }
 
-        if (actionData.lore != null) {
+        if (data.name != null) {
             if (meta == null) {
                 meta = item.getItemMeta();
             }
 
             if (meta != null) {
-                meta.setLore(Arrays.asList(actionData.lore));
+                meta.setDisplayName(data.name);
+            }
+        }
+
+        if (data.lore != null) {
+            if (meta == null) {
+                meta = item.getItemMeta();
+            }
+
+            if (meta != null) {
+                meta.setLore(Arrays.asList(data.lore));
             }
         }
 
         if (meta != null) {
             item.setItemMeta(meta);
         }
+        return item;
     }
 
     public ItemStackActionData getActionData() {
@@ -648,6 +689,7 @@ public class ItemStackAction extends GenericAction {
     @SuppressWarnings("WeakerAccess")
     public static class ItemStackActionData {
         public int amt;
+        public String material;
         public String name;
         public int color;
         public String owner;
@@ -656,6 +698,7 @@ public class ItemStackAction extends GenericAction {
         public String title;
         public String[] lore;
         public String[] content;
+        public ItemStackActionData[] inventory;
         public String slot = "-1";
         public int[] effectColors;
         public int[] fadeColors;
@@ -667,4 +710,5 @@ public class ItemStackAction extends GenericAction {
         public boolean potionExtended;
         public boolean potionUpgraded;
     }
+
 }
