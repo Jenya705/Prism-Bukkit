@@ -5,6 +5,7 @@ import me.botsko.prism.api.actions.Handler;
 import me.botsko.prism.database.InsertQuery;
 import me.botsko.prism.measurement.QueueStats;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
@@ -12,6 +13,8 @@ public class RecordingTask implements Runnable {
 
     private final Prism plugin;
     private static int actionsPerInsert;
+
+    private static Handler[] handlersArray;
 
     public static void setActionsPerInsert(int adjust) {
         actionsPerInsert = adjust;
@@ -26,6 +29,9 @@ public class RecordingTask implements Runnable {
     public RecordingTask(Prism plugin) {
         this.plugin = plugin;
         actionsPerInsert = plugin.getConfig().getInt("prism.query.actions-per-insert-batch");
+        if (handlersArray == null || handlersArray.length != actionsPerInsert) {
+            handlersArray = new Handler[actionsPerInsert < 1 ? 301 : actionsPerInsert + 1];
+        }
     }
 
     /**
@@ -35,7 +41,13 @@ public class RecordingTask implements Runnable {
      * @return rows affected.
      */
     public static long insertActionIntoDatabase(Handler a) {
-        return Prism.getPrismDataSource().getDataInsertionQuery().insertActionIntoDatabase(a);
+        try {
+            Prism.getPrismDataSource().getDataInsertionQuery().insert(new Handler[]{a});
+            return 1;
+        } catch (SQLException | IOException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 
     /**
@@ -94,7 +106,6 @@ public class RecordingTask implements Runnable {
             InsertQuery batchedQuery;
             try {
                 batchedQuery = Prism.getPrismDataSource().getDataInsertionQuery();
-                batchedQuery.createBatch();
             } catch (Exception e) {
                 e.printStackTrace();
                 if (e instanceof SQLException) {
@@ -115,10 +126,10 @@ public class RecordingTask implements Runnable {
                 if (a.isCanceled()) {
                     continue;
                 }
-                batchedQuery.insertActionIntoDatabase(a);
+
+                handlersArray[i] = a;
 
                 actionsRecorded++;
-
                 // Break out of the loop and just commit what we have
                 if (i >= perBatch) {
                     Prism.debug("Recorder: Batch max exceeded, running insert. Queue remaining: "
@@ -127,11 +138,14 @@ public class RecordingTask implements Runnable {
                 }
                 i++;
             }
+            if (i != perBatch) {
+                handlersArray[i] = null;
+            }
             long batchDoneTime = System.currentTimeMillis();
             long batchingTime = batchDoneTime - start;
             // The main delay is here
             try {
-                batchedQuery.processBatch();
+                batchedQuery.insert(handlersArray);
             } catch (Exception e) {
                 e.printStackTrace();
             }

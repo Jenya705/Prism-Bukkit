@@ -143,7 +143,7 @@ public class ItemStackAction extends GenericAction {
         }
 
         // Enchantments
-        if (!enchantments.isEmpty()) {
+        if (enchantments != null && !enchantments.isEmpty()) {
             final String[] enchs = new String[enchantments.size()];
             int i = 0;
             for (final Entry<Enchantment, Integer> ench : enchantments.entrySet()) {
