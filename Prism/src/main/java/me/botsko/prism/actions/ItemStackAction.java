@@ -102,7 +102,7 @@ public class ItemStackAction extends GenericAction {
         // Set basics
         setMaterial(item.getType());
         ItemStackActionData newActionData = serializeItem(item, quantity, enchantments);
-        if (!actionData.slot.equals("-1")) {
+        if (actionData != null && !actionData.slot.equals("-1")) {
             newActionData.slot = actionData.slot;
         }
         actionData = newActionData;
