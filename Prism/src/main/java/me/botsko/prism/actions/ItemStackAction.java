@@ -101,7 +101,11 @@ public class ItemStackAction extends GenericAction {
 
         // Set basics
         setMaterial(item.getType());
-        actionData = serializeItem(item, quantity, enchantments);
+        ItemStackActionData newActionData = serializeItem(item, quantity, enchantments);
+        if (!actionData.slot.equals("-1")) {
+            newActionData.slot = actionData.slot;
+        }
+        actionData = newActionData;
     }
 
     private static ItemStackActionData serializeItem(ItemStack item, int quantity, Map<Enchantment, Integer> enchantments) {
@@ -260,6 +264,9 @@ public class ItemStackAction extends GenericAction {
     }
 
     public void setSlot(String slot) {
+        if (actionData == null) {
+            actionData = new ItemStackActionData();
+        }
         actionData.slot = slot;
     }
 

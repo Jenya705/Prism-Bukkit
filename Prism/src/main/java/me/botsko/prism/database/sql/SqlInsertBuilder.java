@@ -42,7 +42,6 @@ public class SqlInsertBuilder extends QueryBuilder implements InsertQuery {
             for (Handler handler: handlers) {
                 if (handler == null) break;
                 int worldId = 0;
-                long id = 0;
                 String worldName = handler.getLoc().getWorld().getName();
                 if (Prism.prismWorlds.containsKey(worldName)) {
                     worldId = Prism.prismWorlds.get(worldName);
@@ -74,10 +73,13 @@ public class SqlInsertBuilder extends QueryBuilder implements InsertQuery {
                     Handler handler = handlers[i++];
                     if (handler == null) break;
                     if (handler.hasExtraData()) {
-                        extraStatement.setLong(1, generatedKeys.getLong(1));
-                        extraStatement.setString(2, handler.serialize());
-                        extraStatement.addBatch();
-                        needToExecute = true;
+                        String data = handler.serialize();
+                        if (data != null && !data.isEmpty()) {
+                            extraStatement.setLong(1, generatedKeys.getLong(1));
+                            extraStatement.setString(2, data);
+                            extraStatement.addBatch();
+                            needToExecute = true;
+                        }
                     }
                 }
                 if (needToExecute) {

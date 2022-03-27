@@ -4,6 +4,7 @@ import me.botsko.prism.Prism;
 import me.botsko.prism.api.actions.Handler;
 import me.botsko.prism.database.InsertQuery;
 import me.botsko.prism.measurement.QueueStats;
+import org.bukkit.Bukkit;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -193,9 +194,9 @@ public class RecordingTask implements Runnable {
      */
     private void scheduleNextRecording() {
         if (!plugin.isEnabled()) {
-            Prism.log(
-                    "Can't schedule new recording tasks as plugin is now disabled. If you're shutting"
-                            + " down the server, ignore me.");
+            if (!Bukkit.isStopping()) {
+                Prism.log("Can't schedule new recording tasks as plugin is now disabled");
+            }
             return;
         }
         plugin.recordingTask = plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin,
