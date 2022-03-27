@@ -63,7 +63,7 @@ public class SqlInsertBuilder extends QueryBuilder implements InsertQuery {
                 applyToInsert(statement, handler, actionId, playerId, worldId, newIds, oldIds, l);
                 statement.addBatch();
             }
-            statement.executeUpdate();
+            statement.executeLargeBatch();
             ResultSet generatedKeys = statement.getGeneratedKeys();
             int i = 0;
             try (PreparedStatement extraStatement = conn.prepareStatement(
@@ -83,7 +83,7 @@ public class SqlInsertBuilder extends QueryBuilder implements InsertQuery {
                     }
                 }
                 if (needToExecute) {
-                    extraStatement.executeUpdate();
+                    extraStatement.executeLargeBatch();
                 }
             }
         }
